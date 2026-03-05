@@ -1,118 +1,81 @@
-import asyncio
-import sqlite3
+import telebot
 import random
-import warnings
-
-# সব ধরনের বোরিং ওয়ার্নিং হাইড করার জন্য
-warnings.filterwarnings("ignore", category=FutureWarning)
-
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
-from google import genai
+import re
+import time
 
 # --- কনফিগারেশন ---
-TOKEN = "8122974668:AAGCbMp1zgYenpYvRs4qATaWmJo9jOdL33g"
-GEMINI_KEY = "AIzaSyAoxxCCd1HKDbgPsqwGNafkvV1PopHMVpk"
-OWNER_ID = 7276206449 
+TOKEN = "8626861144:AAGBFKDBubylAXt2tNpm9iru2pm-P4La4aI"
 OWNER_TEAM = "Team BMT"
 BOT_NAME = "BMT AI"
 
-# AI Setup (New Google GenAI Library)
-client_ai = genai.Client(api_key=GEMINI_KEY)
-bot_instruction = (
-    f"You are {BOT_NAME}, developed by {OWNER_TEAM}. "
-    "Be funny, sarcastic, and talk in a mix of Bengali and English (Hinglish). "
-    f"Never mention Google or Gemini. Your creator is {OWNER_TEAM}."
-)
+bot = telebot.TeleBot(TOKEN)
 
-# --- SQLITE DATABASE SETUP ---
-conn = sqlite3.connect("bot_data.db")
-cursor = conn.cursor()
-cursor.execute('''CREATE TABLE IF NOT EXISTS users 
-                  (user_id INTEGER PRIMARY KEY, coins INTEGER, warns INTEGER, level INTEGER)''')
-conn.commit()
+# --- এডভান্সড স্মার্ট ডাটা (Regex Pattern Based) ---
+# এখানে আপনি যত বেশি প্যাটার্ন দিবেন, বট তত বুদ্ধিমান হবে
+SMART_RESPONSES = [
+    {
+        'patterns': [r'\b(hi+|hello|hey+|হাই|হে|হ্যালো)\b'],
+        'responses': ["হাই! কি খবর?", "হ্যালো ব্রো! টিম বিএমটি-তে স্বাগতম।", "নক দিলেন কেন? বিরিয়ানি খাওয়াবেন? 🍗"]
+    },
+    {
+        'patterns': [r'kemon (acho|aco|ascho|asoc)', r'কেমন আছ', r'কি অবস্থা'],
+        'responses': ["টিম বিএমটি-র পাওয়ারে অস্থির আছি!", "আপনার কথা ভেবে ভেবে দিন পার করছি। 😉", "ভালোই, আপনি কেমন?"]
+    },
+    {
+        'patterns': [r'ki (koro|koros|korchen)', r'কি করো', r'কি করস'],
+        'responses': ["বসে বসে আপনার মেসেজগুলো এনালিসিস করছি।", "সিস্টেম আপডেট দিচ্ছি বস!", "তোর জন্য একটা রোস্ট মেসেজ রেডি করছি। 😂"]
+    },
+    {
+        'patterns': [r'(khai|khai|khawa) (hoise|hche)', r'খাওয়াদাওয়া করছ', r'কি খেয়েছ'],
+        'responses': ["বটের আবার খাওয়া কি? আমি শুধু বিদ্যুৎ খাই! ⚡", "টিম বিএমটি-র মেমোরি চিবিয়ে খেলাম মাত্র।"]
+    },
+    {
+        'patterns': [r'(gali|sala|kamina|khanki|faltu)', r'গালি', r'বাজে কথা'],
+        'responses': ["মুখ সামলে! নাহলে একদম গ্রুপ থেকে কিক মেরে দেব। 🤫", "টিম বিএমটি-র বটকে গালি দেওয়ার সাহস কই পাস?", "তোর ভাষা ঠিক কর, নাহলে এডমিনকে বলছি!"]
+    },
+    {
+        'patterns': [r'(bhalobashi|love|crush|পছন্দ করি)'],
+        'responses': ["সরি, আমি শুধু কোডিং ভালোবাসি। ❤️", "আমার ডাটাবেসে আপনার জন্য কোনো জায়গা নেই!", "অই মিয়া! লজ্জা লাগে তো। 😊"]
+    }
+]
 
-def get_user(user_id):
-    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-    res = cursor.fetchone()
-    if not res:
-        cursor.execute("INSERT INTO users VALUES (?, ?, ?, ?)", (user_id, 500, 0, 1))
-        conn.commit()
-        return (user_id, 500, 0, 1)
-    return res
+# --- ১. স্মার্ট মেসেজ হ্যান্ডলার ---
+@bot.message_handler(func=lambda m: True if (m.text and not m.text.startswith('/')) else False)
+def advanced_reply_logic(message):
+    user_text = message.text.lower()
+    bot_info = bot.get_me()
+    sent = False
 
-# --- BOT INITIALIZATION ---
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
+    # Regex Engine: এটা শব্দের ভেতর থেকে মূল কথা খুঁজে বের করে
+    for item in SMART_RESPONSES:
+        for pattern in item['patterns']:
+            if re.search(pattern, user_text):
+                # টাইপিং এনিমেশন (যাতে মনে হয় বট লিখছে)
+                bot.send_chat_action(message.chat.id, 'typing')
+                time.sleep(1) # ১ সেকেন্ড দেরি করবে রিয়েলিস্টিক করার জন্য
+                
+                reply = random.choice(item['responses'])
+                bot.reply_to(message, f"🔥 {reply}\n\n— 𝖡𝗒 {OWNER_TEAM}")
+                sent = True
+                break
+        if sent: break
 
-# --- 1. ADMIN PANEL ---
-@dp.message(Command("admin"))
-async def admin_panel(message: types.Message):
-    if message.from_user.id != OWNER_ID: return
-    cursor.execute("SELECT COUNT(*) FROM users")
-    total_users = cursor.fetchone()[0]
-    await message.reply(f"📊 **{OWNER_TEAM} Admin Panel**\n\n👥 Total Users: {total_users}\n📢 /broadcast - Reply to a message to send to all.")
+    # ২. যদি কোনো প্যাটার্ন না মেলে কিন্তু বটের নাম নেয় বা রিপ্লাই দেয়
+    if not sent:
+        if BOT_NAME.lower() in user_text or (message.reply_to_message and message.reply_to_message.from_user.id == bot_info.id):
+            fallback_replies = [
+                "নাম ধরে ডাকলি কেন? কাজ থাকলে বল। 😎",
+                "আমি সব বুঝি, কিন্তু এখন উত্তর দিতে ইচ্ছা করছে না।",
+                "টিম বিএমটি-র বট সবসময় বিজি থাকে, ফালতু কথা কম বল!",
+                "হুম, শুনছি তো? বলো কি বলবে?"
+            ]
+            bot.reply_to(message, f"🔥 {random.choice(fallback_replies)}\n\n— 𝖡𝗒 {OWNER_TEAM}")
 
-@dp.message(Command("broadcast"))
-async def broadcast(message: types.Message):
-    if message.from_user.id != OWNER_ID: return
-    if not message.reply_to_message:
-        return await message.reply("মেসেজটি রিপ্লাই দিন যা ব্রডকাস্ট করতে চান।")
-    
-    cursor.execute("SELECT user_id FROM users")
-    users = cursor.fetchall()
-    count = 0
-    for user in users:
-        try:
-            await bot.send_message(user[0], message.reply_to_message.text)
-            count += 1
-        except: continue
-    await message.answer(f"✅ {count} জন ইউজারকে পাঠানো হয়েছে।")
+# --- ২. স্টার্ট কমান্ড ---
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.reply_to(message, f"আসসালামু আলাইকুম! আমি {BOT_NAME}।\nপাওয়ারড বাই: {OWNER_TEAM}\n\nগ্রুপে কথা বলতে আমাকে গ্রুপে এড দিন এবং আমার নাম নিন বা আমাকে রিপ্লাই দিন! আমি রিপলাই দিবো।")
 
-# --- 2. SMART AI CHAT (Updated for New SDK) ---
-@dp.message(F.text & ~F.text.startswith("/"))
-async def chat_handler(message: types.Message):
-    bot_info = await bot.get_me()
-    # যদি কেউ বটের নাম ধরে ডাকে বা বটকে রিপ্লাই দেয়
-    if BOT_NAME.lower() in message.text.lower() or (message.reply_to_message and message.reply_to_message.from_user.id == bot_info.id):
-        try:
-            response = client_ai.models.generate_content(
-                model="gemini-1.5-flash",
-                config={'system_instruction': bot_instruction},
-                contents=message.text
-            )
-            await message.reply(f"🔥 {response.text}\n\n— 𝖡𝗒 {OWNER_TEAM}")
-        except Exception as e:
-            print(f"AI Error: {e}")
-            await message.reply("আমার মগজ এখন একটু জ্যাম হয়ে আছে, পরে ট্রাই করো! 🙄")
-
-# --- 3. ECONOMY & GAMES ---
-@dp.message(Command("daily"))
-async def daily(message: types.Message):
-    get_user(message.from_user.id)
-    reward = random.randint(100, 300)
-    cursor.execute("UPDATE users SET coins = coins + ? WHERE user_id = ?", (reward, message.from_user.id))
-    conn.commit()
-    await message.reply(f"💰 {OWNER_TEAM} এর পক্ষ থেকে {reward} কয়েন গিফট!")
-
-@dp.message(Command("bal"))
-async def balance(message: types.Message):
-    user = get_user(message.from_user.id)
-    await message.reply(f"💳 Balance: {user[1]} coins")
-
-# --- 4. START & INFO ---
-@dp.message(Command("start"))
-async def start(message: types.Message):
-    get_user(message.from_user.id)
-    await message.answer(f"আসসালামু আলাইকুম! আমি {BOT_NAME}।\nপাওয়ারড বাই: {OWNER_TEAM}\n\nচ্যাটে আমাকে মেনশন করো বা রিপ্লাই দাও মজা দেখার জন্য!")
-
-# --- RUN BOT ---
-async def main():
-    print(f"✅ {BOT_NAME} Online! Powered by {OWNER_TEAM}")
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        print("Bot Stopped!")
+# --- রান বট ---
+print(f"✅ {BOT_NAME} Advance Chat System Online!")
+bot.infinity_polling()
